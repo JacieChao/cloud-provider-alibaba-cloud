@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/klog/v2/klogr"
 
-	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextcli "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,13 +25,13 @@ var (
 )
 
 // Scope is the scope of a CRD.
-type Scope = apiextv1beta1.ResourceScope
+type Scope = apiextv1.ResourceScope
 
 const (
 	// ClusterScoped represents a type of a cluster scoped CRD.
-	ClusterScoped = apiextv1beta1.ClusterScoped
+	ClusterScoped = apiextv1.ClusterScoped
 	// NamespaceScoped represents a type of a namespaced scoped CRD.
-	NamespaceScoped = apiextv1beta1.NamespaceScoped
+	NamespaceScoped = apiextv1.NamespaceScoped
 )
 
 // Conf is the configuration required to create a CRD
@@ -57,7 +57,7 @@ type Conf struct {
 	EnableStatusSubresource bool
 	// EnableScaleSubresource by default will be nil and means disabled, if
 	// the object is present it will set this scale configuration to the subresource.
-	EnableScaleSubresource *apiextv1beta1.CustomResourceSubresourceScale
+	EnableScaleSubresource *apiextv1.CustomResourceSubresourceScale
 }
 
 func (c *Conf) getName() string {
@@ -111,26 +111,30 @@ func (c *Client) EnsurePresent(conf Conf) error {
 	// Create subresources
 	subres := c.createSubresources(conf)
 
-	crd := &apiextv1beta1.CustomResourceDefinition{
+	crd := &apiextv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: crdName,
 		},
-		Spec: apiextv1beta1.CustomResourceDefinitionSpec{
-			Group:   conf.Group,
-			Version: conf.Version,
-			Scope:   conf.Scope,
-			Names: apiextv1beta1.CustomResourceDefinitionNames{
+		Spec: apiextv1.CustomResourceDefinitionSpec{
+			Group: conf.Group,
+			Versions: []apiextv1.CustomResourceDefinitionVersion{
+				{
+					Name:         conf.Version,
+					Subresources: subres,
+				},
+			},
+			Scope: conf.Scope,
+			Names: apiextv1.CustomResourceDefinitionNames{
 				Plural:     conf.NamePlural,
 				Kind:       conf.Kind,
 				ShortNames: conf.ShortNames,
 				Categories: c.addDefaultCaregories(conf.Categories),
 			},
-			Subresources: subres,
 		},
 	}
 
 	_, err = c.client.
-		ApiextensionsV1beta1().
+		ApiextensionsV1().
 		CustomResourceDefinitions().
 		Create(context.TODO(), crd, metav1.CreateOptions{})
 	if err != nil {
@@ -143,16 +147,16 @@ func (c *Client) EnsurePresent(conf Conf) error {
 	return c.WaitToBePresent(crdName, crdReadyTimeout)
 }
 
-func (c *Client) createSubresources(conf Conf) *apiextv1beta1.CustomResourceSubresources {
+func (c *Client) createSubresources(conf Conf) *apiextv1.CustomResourceSubresources {
 	if !conf.EnableStatusSubresource &&
 		conf.EnableScaleSubresource == nil {
 		return nil
 	}
 
-	sr := &apiextv1beta1.CustomResourceSubresources{}
+	sr := &apiextv1.CustomResourceSubresources{}
 
 	if conf.EnableStatusSubresource {
-		sr.Status = &apiextv1beta1.CustomResourceSubresourceStatus{}
+		sr.Status = &apiextv1.CustomResourceSubresourceStatus{}
 	}
 
 	if conf.EnableScaleSubresource != nil {
